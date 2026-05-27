@@ -910,9 +910,35 @@ def main():
     st.sidebar.title("📌 Navigation")
 
     
+    # =========================
+    # CLEAR ALL DATA
+    # =========================
+
+    st.sidebar.subheader("⚠️ Danger Zone")
+
+    confirm_delete = st.sidebar.checkbox(
+        "I understand this will delete everything"
+    )
+
+    if st.sidebar.button("🗑️ Clear All Data"):
+
+        if confirm_delete:
+
+            st.session_state.monthly_data = {}
+
+            empty_df = pd.DataFrame()
+
+            save_permanent(empty_df)
+
+            st.success("All data deleted successfully")
+
+            st.rerun()
+
+        else:
+
+            st.warning("Please confirm deletion first")
 
     
-
     menu = st.sidebar.radio(
     "Go To",
     [
@@ -966,5 +992,7 @@ def get_combined_df():
 # RUN APP
 # =========================================================
 main()
+
+
 
 
