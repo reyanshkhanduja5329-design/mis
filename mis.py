@@ -5,6 +5,11 @@ import bcrypt
 import plotly.express as px
 import plotly.graph_objects as go
 
+
+
+
+
+
 # =========================================================
 # 💾 PERMANENT STORAGE SYSTEM
 # =========================================================
@@ -17,12 +22,20 @@ def save_permanent(df):
     df.to_csv(DATA_FILE, index=False)
 
 def load_permanent():
-    try:
-        if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
-            return pd.read_csv(DATA_FILE)
-    except:
-        pass
+    if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
+        return pd.read_csv(DATA_FILE, dtype=str)
     return pd.DataFrame()
+
+
+###
+if "monthly_data" not in st.session_state:
+    st.session_state.monthly_data = {}
+###
+if "All Data" not in st.session_state.monthly_data:
+    st.session_state.monthly_data["All Data"] = load_permanent()
+
+
+
 # =========================================================
 # PAGE CONFIG
 # =========================================================
@@ -40,12 +53,7 @@ st.title("🏢 Advanced Company MIS Dashboard")
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
-if "df" not in st.session_state:
-    st.session_state.df = None
 
-
-# AUTO LOAD DATA WHEN APP STARTS
-st.session_state.df = load_permanent()
 
 # =========================================================
 # USERS
@@ -82,30 +90,60 @@ def login():
 
 
 # =========================================================
-# FILE UPLOAD
+# ADD DATA
 # =========================================================
 def add_data_page():
 
-    st.subheader("📝 Manual Data Sheet (Live Entry)")
+    st.subheader("📝 Monthly Data Sheet (Multi-Month System)")
 
-    # If no data exists, create empty table
-    if st.session_state.df is None:
-        st.session_state.df = pd.DataFrame()
+    # Month selector
+    month = st.selectbox(
+        "Select Month",
+        [
+            "January", "February", "March", "April",
+            "May", "June", "July", "August",
+            "September", "October", "November", "December"
+        ]
+    )
 
-    # Editable spreadsheet
+    # Load month data
+    if month not in st.session_state.monthly_data:
+        st.session_state.monthly_data[month] = pd.DataFrame({
+    "Name": pd.Series(dtype="str"),
+    "Sales": pd.Series(dtype="float"),
+    "Expenses": pd.Series(dtype="float"),
+    "Date": pd.Series(dtype="str"),
+    "Month": pd.Series(dtype="str")
+})
+
+
+    st.write(f"### 📅 Editing: {month}")
+
+    # Editable sheet
     edited_df = st.data_editor(
-        st.session_state.df,
+        st.session_state.monthly_data[month],
         num_rows="dynamic",
         use_container_width=True
     )
 
     # Save button
-    if st.button("💾 Save Data Permanently"):
+    if st.button("💾 Save Month Data"):
 
-        st.session_state.df = edited_df
-        save_permanent(edited_df)
+        st.session_state.monthly_data[month] = edited_df
 
-        st.success("Data saved permanently!")
+        # Combine all months into one file
+        combined = pd.concat(
+    [
+        d.assign(Month=m)
+        for m, d in st.session_state.monthly_data.items()
+        if not d.empty
+    ],
+    ignore_index=True
+)
+
+        save_permanent(combined)
+
+        st.success(f"{month} data saved permanently!")
 # =========================================================
 # KPI SECTION
 # =========================================================
@@ -143,11 +181,13 @@ def dashboard():
 
     st.subheader("📊 Executive Dashboard")
 
-    df = st.session_state.df
+    df = get_combined_df()
+    df = df.apply(pd.to_numeric, errors="coerce")
+    df = df.fillna(0)
 
-    if df is None:
-        st.warning("Please upload data first")
-        return
+    if df.empty:
+      st.warning("Please upload data first")
+      return
 
     # DISPLAY DATA
     with st.expander("📄 View Raw Data"):
@@ -284,7 +324,9 @@ def insights():
 
     st.subheader("🧠 AI Business Insights")
 
-    df = st.session_state.df
+    df = get_combined_df()
+    df = df.apply(pd.to_numeric, errors="coerce")
+    df = df.fillna(0)
 
     if df is None:
         st.warning("Upload data first")
@@ -339,11 +381,18 @@ def chatbot():
 
     st.subheader("🤖 Smart MIS AI Assistant")
 
-    df = st.session_state.df
+    df = get_combined_df()
 
-    if df is None:
-        st.warning("Upload data first")
-        return
+    # safety check
+    if df.empty:
+      st.warning("Upload data first")
+      return
+
+   # ensure Month column exists safely
+    if "Month" not in df.columns:
+     df["Month"] = ""
+
+    df["Month"] = df["Month"].astype(str).str.lower()
 
     q = st.text_input(
         "Ask business questions",
@@ -363,12 +412,44 @@ Examples:
 
     q = q.lower()
 
+    selected_month = None
+
+    month_map = {
+    "jan": "January",
+    "january": "January",
+    "feb": "February",
+    "february": "February",
+    "mar": "March",
+    "march": "March",
+    "apr": "April",
+    "april": "April",
+    "may": "May",
+    "jun": "June",
+    "june": "June",
+    "jul": "July",
+    "july": "July",
+    "aug": "August",
+    "august": "August",
+    "sep": "September",
+    "september": "September",
+    "oct": "October",
+    "october": "October",
+    "nov": "November",
+    "november": "November",
+    "dec": "December",
+    "december": "December"
+}
+
     # =====================================================
     # COLUMN DETECTION
     # =====================================================
     numeric_cols = df.select_dtypes(include="number").columns.tolist()
 
     text_cols = df.select_dtypes(include="object").columns.tolist()
+
+    # ensure Month is included properly
+    if "Month" not in text_cols and "month" in df.columns:
+        text_cols.append("Month")
 
     # =====================================================
     # DETECT METRIC COLUMN
@@ -466,6 +547,11 @@ Examples:
     # FILTER ROWS
     # =====================================================
     filtered_df = df.copy()
+
+    if selected_month and "Month" in filtered_df.columns:
+      filtered_df = filtered_df[
+        filtered_df["Month"].astype(str).str.lower() == selected_month.lower()
+    ]
 
     for word in query_words:
 
@@ -769,6 +855,8 @@ def main():
     # SIDEBAR
     st.sidebar.title("📌 Navigation")
 
+    
+
     menu = st.sidebar.radio(
     "Go To",
     [
@@ -798,6 +886,24 @@ def main():
 
         st.session_state.logged_in = False
         st.rerun()
+
+
+###
+def get_combined_df():
+
+    if "monthly_data" not in st.session_state:
+        return pd.DataFrame()
+
+    dfs = [
+        df for df in st.session_state.monthly_data.values()
+        if isinstance(df, pd.DataFrame) and not df.empty
+    ]
+
+    if not dfs:
+        return pd.DataFrame()
+
+    return pd.concat(dfs, ignore_index=True)
+###
 
 
 # =========================================================
