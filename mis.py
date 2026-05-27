@@ -22,8 +22,18 @@ def save_permanent(df):
     df.to_csv(DATA_FILE, index=False)
 
 def load_permanent():
-    if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
-        return pd.read_csv(DATA_FILE, dtype=str)
+
+    if (
+        os.path.exists(DATA_FILE)
+        and os.path.getsize(DATA_FILE) > 0
+    ):
+
+        try:
+            return pd.read_csv(DATA_FILE, dtype=str)
+
+        except pd.errors.EmptyDataError:
+            return pd.DataFrame()
+
     return pd.DataFrame()
 
 ###
