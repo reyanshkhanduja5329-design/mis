@@ -20,9 +20,9 @@ def load_permanent():
     try:
         if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
             return pd.read_csv(DATA_FILE)
-    except Exception:
-        return None
-    return None
+    except:
+        pass
+    return pd.DataFrame()
 # =========================================================
 # PAGE CONFIG
 # =========================================================
@@ -84,34 +84,28 @@ def login():
 # =========================================================
 # FILE UPLOAD
 # =========================================================
-def upload_page():
+def add_data_page():
 
-    st.subheader("📁 Upload Business Data")
+    st.subheader("📝 Manual Data Sheet (Live Entry)")
 
-    file = st.file_uploader(
-        "Upload Excel File",
-        type=["xlsx"]
+    # If no data exists, create empty table
+    if st.session_state.df is None:
+        st.session_state.df = pd.DataFrame()
+
+    # Editable spreadsheet
+    edited_df = st.data_editor(
+        st.session_state.df,
+        num_rows="dynamic",
+        use_container_width=True
     )
 
-    if file:
+    # Save button
+    if st.button("💾 Save Data Permanently"):
 
-        try:
-            df = pd.read_excel(file)
+        st.session_state.df = edited_df
+        save_permanent(edited_df)
 
-            # CLEAN COLUMN NAMES
-            df.columns = [col.strip() for col in df.columns]
-
-            st.session_state.df = df
-            save_permanent(df)
-
-            st.success("File Uploaded Successfully")
-
-            st.dataframe(df, use_container_width=True)
-
-        except Exception as e:
-            st.error(f"Error: {e}")
-
-
+        st.success("Data saved permanently!")
 # =========================================================
 # KPI SECTION
 # =========================================================
@@ -762,28 +756,6 @@ Supported Questions:
 # ✏️ IN-APP DATA EDITOR
 # =========================================================
 
-def data_editor():
-
-    st.subheader("✏️ Edit Excel Data (Live MIS Editor)")
-
-    df = st.session_state.df
-
-    if df is None:
-        st.warning("No data loaded")
-        return
-
-    edited_df = st.data_editor(
-        df,
-        num_rows="dynamic",
-        use_container_width=True
-    )
-
-    if st.button("💾 Save Changes Permanently"):
-
-        st.session_state.df = edited_df
-        save_permanent(edited_df)
-
-        st.success("Changes saved permanently!")
 
 # =========================================================
 # MAIN APP
@@ -798,19 +770,18 @@ def main():
     st.sidebar.title("📌 Navigation")
 
     menu = st.sidebar.radio(
-        "Go To",
-        [
-            "Upload Data",
-            "Dashboard",
-            "AI Insights",
-            "AI Chatbot",
-            "Data Editor",
-            "Logout"
-        ]
-    )
+    "Go To",
+    [
+        "Add Data",
+        "Dashboard",
+        "AI Insights",
+        "AI Chatbot",
+        "Logout"
+    ]
+)
 
-    if menu == "Upload Data":
-        upload_page()
+    if menu == "Add Data":
+        add_data_page()
 
     elif menu == "Dashboard":
         dashboard()
@@ -821,8 +792,7 @@ def main():
     elif menu == "AI Chatbot":
         chatbot()
 
-    elif menu == "Data Editor":
-        data_editor()
+
 
     elif menu == "Logout":
 
@@ -834,5 +804,3 @@ def main():
 # RUN APP
 # =========================================================
 main()
-
-
