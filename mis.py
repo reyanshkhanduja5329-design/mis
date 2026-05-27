@@ -26,13 +26,24 @@ def load_permanent():
         return pd.read_csv(DATA_FILE, dtype=str)
     return pd.DataFrame()
 
+###
 
-###
+
 if "monthly_data" not in st.session_state:
+
     st.session_state.monthly_data = {}
-###
-if "All Data" not in st.session_state.monthly_data:
-    st.session_state.monthly_data["All Data"] = load_permanent()
+
+    saved_df = load_permanent()
+
+    if not saved_df.empty and "Month" in saved_df.columns:
+
+        for month in saved_df["Month"].unique():
+
+            month_df = saved_df[
+                saved_df["Month"] == month
+            ]
+
+            st.session_state.monthly_data[month] = month_df
 
 
 
@@ -383,6 +394,16 @@ def chatbot():
 
     df = get_combined_df()
 
+        # convert numeric columns safely
+    for col in df.columns:
+
+        if col.lower() not in ["name", "month", "date"]:
+
+            df[col] = pd.to_numeric(
+                df[col],
+                errors="coerce"
+            )
+
     # safety check
     if df.empty:
       st.warning("Upload data first")
@@ -457,8 +478,16 @@ Examples:
     selected_metric = None
 
     for col in numeric_cols:
+      if col.lower() in q:
+        selected_metric = col
+        break
 
-        if col.lower() in q:
+# default to Sales if user only says "sales"
+    if selected_metric is None:
+
+      for col in numeric_cols:
+
+        if "sale" in col.lower():
             selected_metric = col
             break
 
@@ -467,82 +496,107 @@ Examples:
     # =====================================================
     query_words = q.split()
 
-    # =====================================================
-    # COMPARE LOGIC
-    # =====================================================
+     # =========================
+    # COMPARE FEATURE
+    # =========================
+
     if "compare" in q:
 
-        matched_values = []
+        comparison_items = []
 
-        for col in text_cols:
+        # detect months
+        for key, value in month_map.items():
 
-            unique_vals = (
-                df[col]
-                .astype(str)
-                .str.lower()
-                .unique()
-            )
+            if key in q:
+                comparison_items.append(value)
 
-            for val in unique_vals:
+        comparison_items = list(set(comparison_items))
 
-                if val in q:
-                    matched_values.append(val)
+        # detect metric automatically
+        if selected_metric is None:
 
-        matched_values = list(set(matched_values))
+            for col in numeric_cols:
 
-        if len(matched_values) >= 2 and selected_metric:
+                col_lower = col.lower()
 
-            comparison_data = []
+                if "sale" in q and "sale" in col_lower:
+                    selected_metric = col
 
-            for val in matched_values[:2]:
+                elif (
+                    "expense" in q or
+                    "expenditure" in q
+                ) and (
+                    "expense" in col_lower or
+                    "expenditure" in col_lower
+                ):
+                    selected_metric = col
 
-                temp = df[
-                    df.astype(str)
-                    .apply(
-                        lambda row:
-                        row.str.lower()
-                        .str.contains(val)
-                        .any(),
-                        axis=1
-                    )
+                elif "profit" in q and "profit" in col_lower:
+                    selected_metric = col
+
+        # fallback
+        if selected_metric is None and numeric_cols:
+            selected_metric = numeric_cols[0]
+        
+
+   
+
+        # safety check
+        if selected_metric is None:
+            st.error("No metric found to compare")
+            return
+
+        # compare months
+        if len(comparison_items) >= 2:
+
+            compare_data = []
+
+            for month in comparison_items[:2]:
+
+                temp_df = df[
+                    df["Month"].astype(str).str.lower() == month.lower()
                 ]
 
-                if not temp.empty:
+                total = pd.to_numeric(
+                    temp_df[selected_metric],
+                    errors="coerce"
+                ).fillna(0).sum()
 
-                    total = temp[selected_metric].sum()
+                compare_data.append({
+                    "Month": month.title(),
+                    "Value": total
+                })
 
-                    comparison_data.append({
-                        "Category": val.title(),
-                        "Value": total
-                    })
+            compare_df = pd.DataFrame(compare_data)
 
-            if comparison_data:
+            st.subheader(
+                f"📊 {selected_metric} Comparison"
+            )
 
-                compare_df = pd.DataFrame(comparison_data)
+            st.dataframe(
+                compare_df,
+                use_container_width=True
+            )
 
-                st.subheader(
-                    f"📊 Comparison of {selected_metric}"
-                )
+            fig = px.bar(
+                compare_df,
+                x="Month",
+                y="Value",
+                title=f"{selected_metric} Comparison"
+            )
 
-                st.dataframe(
-                    compare_df,
-                    use_container_width=True
-                )
+            st.plotly_chart(
+                fig,
+                use_container_width=True
+            )
 
-                fig = px.bar(
-                    compare_df,
-                    x="Category",
-                    y="Value",
-                    title=f"{selected_metric} Comparison"
-                )
+            return
 
-                st.plotly_chart(
-                    fig,
-                    use_container_width=True
-                )
-
-                return
-
+        else:
+            st.error(
+                "Please mention 2 months to compare"
+            )
+            return
     # =====================================================
     # FILTER ROWS
     # =====================================================
@@ -857,6 +911,8 @@ def main():
 
     
 
+    
+
     menu = st.sidebar.radio(
     "Go To",
     [
@@ -910,3 +966,5 @@ def get_combined_df():
 # RUN APP
 # =========================================================
 main()
+
+
