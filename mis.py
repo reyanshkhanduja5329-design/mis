@@ -17,9 +17,8 @@ def save_permanent(df):
     df.to_csv(DATA_FILE, index=False)
 
 def load_permanent():
-    if os.path.exists(DATA_FILE):
-        df = pd.read_csv(DATA_FILE)
-        return df
+    if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
+        return pd.read_csv(DATA_FILE)
     return None
 # =========================================================
 # PAGE CONFIG
