@@ -4,6 +4,19 @@ import os
 import bcrypt
 import plotly.express as px
 import plotly.graph_objects as go
+import json
+
+
+
+#####
+
+
+try:
+    with open("data.json", "r") as f:
+        data = json.load(f)
+except:
+    data = []
+
 
 
 
@@ -47,13 +60,27 @@ if "monthly_data" not in st.session_state:
 
     if not saved_df.empty and "Month" in saved_df.columns:
 
+        if "monthly_data" not in st.session_state:
+
+            st.session_state.monthly_data = {}
+
+    saved_df = load_permanent()
+
+    if not saved_df.empty and "Month" in saved_df.columns:
+
         for month in saved_df["Month"].unique():
 
             month_df = saved_df[
                 saved_df["Month"] == month
-            ]
+            ].copy()
 
-            st.session_state.monthly_data[month] = month_df
+            # remove Month column inside sheet
+            month_df = month_df.drop(
+                columns=["Month"],
+                errors="ignore"
+            )
+
+            st.session_state.monthly_data[month] = month_df.reset_index(drop=True)
 
 
 
@@ -118,16 +145,29 @@ def add_data_page():
     st.subheader("📝 Monthly Data Sheet (Multi-Month System)")
 
     # Month selector
-    month = st.selectbox(
+
+    import datetime
+
+
+    months = [
+        "January","February","March","April","May","June",
+        "July","August","September","October","November","December"
+    ]
+
+    current_month = datetime.datetime.now().strftime("%B")
+
+    if "selected_month" not in st.session_state:
+        st.session_state.selected_month = current_month
+
+    st.session_state.selected_month = st.selectbox(
         "Select Month",
-        [
-            "January", "February", "March", "April",
-            "May", "June", "July", "August",
-            "September", "October", "November", "December"
-        ]
+        months,
+        index=months.index(st.session_state.selected_month)
     )
+    
 
     # Load month data
+    month = st.session_state.selected_month
     if month not in st.session_state.monthly_data:
         st.session_state.monthly_data[month] = pd.DataFrame({
     "Name": pd.Series(dtype="str"),
@@ -146,9 +186,12 @@ def add_data_page():
         num_rows="dynamic",
         use_container_width=True
     )
+    edited_df["Month"] = month
 
     # Save button
     if st.button("💾 Save Month Data"):
+
+        edited_df["Month"] = month.lower()
 
         st.session_state.monthly_data[month] = edited_df
 
@@ -385,8 +428,12 @@ def insights():
 
             if growth > 0:
                 st.success(f"{col} is growing positively 📈")
-            else:
+
+            elif growth < 0:
                 st.error(f"{col} is declining 📉")
+
+            else:
+                st.info(f"{col} has no growth change ➖")
 
             st.divider()
 
@@ -403,6 +450,13 @@ def chatbot():
     st.subheader("🤖 Smart MIS AI Assistant")
 
     df = get_combined_df()
+
+    ##
+    if "Month" in df.columns:
+        df["Month"] = df["Month"].astype(str).str.title()
+    else:
+        df["Month"] = ""
+    ##
 
         # convert numeric columns safely
     for col in df.columns:
@@ -443,7 +497,6 @@ Examples:
 
     q = q.lower()
 
-    selected_month = None
 
     month_map = {
     "jan": "January",
@@ -470,6 +523,14 @@ Examples:
     "dec": "December",
     "december": "December"
 }
+    
+    selected_month = None
+
+    for key, value in month_map.items():
+
+        if key in q:
+            selected_month = value.strip().lower()
+            break
 
     # =====================================================
     # COLUMN DETECTION
@@ -612,44 +673,24 @@ Examples:
     # =====================================================
     filtered_df = df.copy()
 
-    if selected_month and "Month" in filtered_df.columns:
-      filtered_df = filtered_df[
-        filtered_df["Month"].astype(str).str.lower() == selected_month.lower()
-    ]
+    # normalize once (IMPORTANT)
+    df["Month"] = df["Month"].astype(str).str.strip().str.lower()
+
+    selected_month = selected_month.strip().lower() if selected_month else None
+
+    if selected_month and "Month" in df.columns:
+        filtered_df = df[df["Month"] == selected_month]
+    else:
+        filtered_df = df.copy()
 
     for word in query_words:
 
-        if word in [
-            "compare",
-            "total",
-            "highest",
-            "lowest",
-            "average",
-            "trend",
-            "profit",
-            "salary",
-            "sales",
-            "expenses"
-        ]:
-            continue
-
-        found = False
-
         for col in text_cols:
 
-            mask = (
-                filtered_df[col]
-                .astype(str)
-                .str.lower()
-                .str.contains(word)
-            )
+            mask = filtered_df[col].astype(str).str.lower().str.contains(word)
 
             if mask.any():
-
                 filtered_df = filtered_df[mask]
-
-                found = True
-
                 break
 
     # =====================================================
@@ -1002,6 +1043,7 @@ def get_combined_df():
 # RUN APP
 # =========================================================
 main()
+
 
 
 
